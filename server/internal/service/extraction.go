@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
@@ -70,7 +71,9 @@ func (s *ExtractionService) Close() {
 
 // ExtractFromImage sends image bytes to the Gemini VLM and returns a parsed TripSheet.
 func (s *ExtractionService) ExtractFromImage(ctx context.Context, imageBytes []byte, mimeType string) (*domain.TripSheet, error) {
-	imgData := genai.ImageData(mimeType, imageBytes)
+	// genai.ImageData expects format ("jpeg", "png"), not full MIME type ("image/jpeg")
+	format := strings.TrimPrefix(mimeType, "image/")
+	imgData := genai.ImageData(format, imageBytes)
 
 	resp, err := s.model.GenerateContent(ctx,
 		imgData,
