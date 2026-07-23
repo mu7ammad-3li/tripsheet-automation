@@ -1,30 +1,22 @@
 # tripsheet-automation (Proof of Concept)
 
-> **AI-augmented, API-first Proof of Concept (POC) service** that automates the ingestion, extraction, and validation of trucking trip sheets — turning handwritten paper into structured, validated data ready for payroll and dispatch.
+> **tripsheet-automation** is an AI-augmented, API-first enterprise solution designed to automate the ingestion, structured extraction, and deterministic validation of handwritten trucking trip sheets.
 
 ---
 
-## Background & Context
+## Executive Summary & Business Case
 
-Trip sheets are the lifeblood of trucking operations. They are the primary operational records used to track driver routes, stops, fuel purchases, IFTA (International Fuel Tax Agreement) jurisdictional mileage, and odometer readings during a haul.
+### Context & Operational Relevance
+Trip sheets are the primary operational records in transportation logistics. They are critical for tracking driver routes, stops, fuel purchases, IFTA (International Fuel Tax Agreement) jurisdictional mileage, and odometer readings. Currently, many fleets rely on dispatchers creating manual trip plans and drivers filling out paper-based sheets on the road.
 
-Currently, many operations rely on dispatchers creating manual trip plans and drivers filling out paper-based sheets to log their actual trip details.
+### The Core Business Problem
+The reliance on physical, handwritten logs creates significant operational and financial friction:
+1. **Manual Data Ingestion Bottlenecks:** Critical billing and route data remains trapped on paper. Transcribing this data manually causes severe delays in driver payroll settlements, dispatch visibility, and IFTA tax reporting.
+2. **Data Integrity & Quality Variance:** Documents filled out by hand in truck cabs suffer from high handwriting variability, smudged ink, and manual calculation errors (e.g., odometer discrepancies).
+3. **Traditional OCR Limitations:** Standard template-based OCR systems fail on unstructured or high-variance handwritten sheets, lacking the layout understanding and contextual intelligence required to map data fields accurately.
 
-## The Core Problem
-
-The reliance on physical, handwritten trip sheets creates significant operational friction:
-
-- **Manual Data Entry Bottlenecks:** Critical operational data is trapped on paper. Manually transcribing this data into the system creates significant delays for downstream operations like driver payroll settlement, dispatch visibility, and fuel analytics.
-
-- **Data Quality and Variability:** Physical trip sheets are filled out by hand in truck cabs. This leads to highly variable handwriting, unpredictable layouts, smeared ink, and human calculation errors (e.g., incorrect odometer math).
-
-- **Limitations of Traditional Tech:** Standard OCR (Optical Character Recognition) struggles to accurately extract data from messy, unstructured handwritten forms. It lacks the contextual understanding needed to differentiate between a fuel receipt amount and a route mileage number when the layout shifts.
-
-## The Solution
-
-This project is an **AI-augmented, API-first service built in Go** that automates the ingestion, extraction, and validation of trucking trip sheets.
-
-By isolating the AI to handle **only** unstructured data and using **deterministic code** for validation, the system provides high accuracy without silent data corruption.
+### The Solution: Hybrid Extraction & Validation
+This service isolates the AI (VLM) to handle high-variance unstructured data extraction while using **deterministic Go backend logic** to enforce strict validation rules. This hybrid approach ensures enterprise-grade accuracy, eliminates silent data corruption, and speeds up cash-flow cycles by accelerating payroll and billing hand-offs.
 
 ```
 📄 Paper Trip Sheet → 📸 Photo/Scan → POST /api/v1/trips/extract
@@ -47,13 +39,13 @@ By isolating the AI to handle **only** unstructured data and using **determinist
 
 5. **Human-in-the-Loop Safeguards:** Require the VLM to assign confidence scores. Any low-confidence reads, missing required fields, or validation failures are automatically routed to an exception queue for human review.
 
-### Environmental Realities
+### Operational Ingestion Pathways
 
-The system is designed to handle two primary ingestion pathways:
+The system is designed to handle two primary ingestion workflows:
 
-- **Clean Scans:** High-quality, flat scans produced by standard office scanners when drivers hand in paperwork at a depot.
+- **Depot Scan (Happy Path):** High-quality, flat scans produced by standard office scanners when drivers hand in paperwork at a terminal.
 
-- **The "Truck Cab" Edge Case:** Drivers submitting documents via mobile photos taken on the road. The system utilizes lightweight image preprocessing (deskewing, contrast enhancement) as a fallback. However, operational policy dictates that drivers are responsible for maintaining document legibility; severely degraded images will be explicitly rejected by the API.
+- **Truck Cab Mobile Photo (Edge Case):** Drivers submitting documents via mobile photos taken on the road. The system utilizes lightweight image preprocessing (grayscale conversion, contrast enhancement, sharpening) as a fallback to improve VLM legibility. Operational policy dictates that drivers are responsible for maintaining basic document readability; severely degraded images will be explicitly rejected by the validation handler.
 
 ---
 
@@ -89,6 +81,27 @@ The Go backend enforces these deterministic checks **after** VLM extraction:
 | Confidence Threshold | `confidence_score > 0.85` | → Exception Queue |
 | Required Fields | Odometer values must be non-null | → Exception Queue |
 | Odometer Sanity | `close > open` | → Exception Queue |
+
+---
+
+## Web Dashboard Interface (Proof of Concept UI)
+
+A responsive, high-fidelity single-page web dashboard is served directly by the Go backend to visualize the ingestion, extraction, and validation pipeline.
+
+#### 1. Ingestion & Preprocessing Zone
+The landing interface features a drag-and-drop zone with optional grayscale and contrast-boosting image preprocessing configuration for mobile "truck-cab" photos.
+
+![Ingestion Interface](docs/images/screenshot_landing.png)
+
+#### 2. Real-Time Extraction & Audit Viewer
+Once uploaded, the screen splits to display the original audit document on the left and the VLM-extracted structured data (odometers, route logs) on the right.
+
+![Extraction Audit Panel](docs/images/screenshot_extracted_data.png)
+
+#### 3. Deterministic Validation Guardrails
+The validation tab breaks down the outcome of the arithmetic validation checks (odometer delta, mileage sums, VLM confidence), indicating whether the trip is cleared or routed to the human-in-the-loop exception queue.
+
+![Validation Guardrails](docs/images/screenshot_validation.png)
 
 ---
 
