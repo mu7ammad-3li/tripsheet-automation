@@ -18,6 +18,14 @@ The reliance on physical, handwritten logs creates significant operational and f
 ### The Solution: Hybrid Extraction & Validation
 This service isolates the AI (VLM) to handle high-variance unstructured data extraction while using **deterministic Go backend logic** to enforce strict validation rules. This hybrid approach ensures enterprise-grade accuracy, eliminates silent data corruption, and speeds up cash-flow cycles by accelerating payroll and billing hand-offs.
 
+### Business Value & VLM Cost Efficiency
+Automating extraction with the Gemini API is extremely cost-effective compared to manual transcription or legacy template OCR:
+*   **Model Tier:** Serves Gemini 3.5 Flash Lite as the default extraction engine (Paid Tier).
+*   **Paid Rates:** Input: **$0.075 per 1M** tokens (image is fixed at 259 tokens) | Output: **$0.30 per 1M** tokens (JSON response).
+*   **Average Cost:** **`$0.25 to $0.45` per 1,000 trip sheets processed** ($0.00025 to $0.00045 per sheet).
+*   **Caching Optimization:** Support for Gemini Context Caching can reduce input costs by an additional 50% for high-volume streams.
+
+
 ```
 📄 Paper Trip Sheet → 📸 Photo/Scan → POST /api/v1/trips/extract
   → Gemini VLM extracts structured JSON
