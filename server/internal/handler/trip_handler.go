@@ -117,6 +117,10 @@ func (h *TripHandler) ExtractTrip(w http.ResponseWriter, r *http.Request) {
 			} else {
 				record.ImagePath = imgPath
 				log.Printf("Audit image saved: %s", imgPath)
+				// Persist the stored image path back to the database
+				if err := h.tripRepo.UpdateImagePath(r.Context(), record.ID, imgPath); err != nil {
+					log.Printf("Warning: failed to update image path in DB: %v", err)
+				}
 			}
 		}
 	}

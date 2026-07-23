@@ -86,6 +86,17 @@ func (r *TripRepository) SaveTrip(ctx context.Context, record *domain.TripRecord
 	return nil
 }
 
+// UpdateImagePath updates the image_path column for a trip.
+// This is used because the image is saved to disk using the generated trip UUID
+// after the main trip record is inserted.
+func (r *TripRepository) UpdateImagePath(ctx context.Context, id string, path string) error {
+	_, err := r.pool.Exec(ctx, "UPDATE trips SET image_path = $1 WHERE id = $2", path, id)
+	if err != nil {
+		return fmt.Errorf("failed to update image path: %w", err)
+	}
+	return nil
+}
+
 // GetTripByID retrieves a trip and its line items by ID.
 func (r *TripRepository) GetTripByID(ctx context.Context, id string) (*domain.TripRecord, error) {
 	record := &domain.TripRecord{}
