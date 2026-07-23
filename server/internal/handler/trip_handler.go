@@ -8,9 +8,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/trucking-poc/server/internal/domain"
 	"github.com/trucking-poc/server/internal/preprocessing"
+	"github.com/trucking-poc/server/internal/repository"
 	"github.com/trucking-poc/server/internal/service"
+	"github.com/trucking-poc/server/internal/storage"
 )
 
 const maxUploadSize = 10 << 20 // 10 MB
@@ -18,11 +22,17 @@ const maxUploadSize = 10 << 20 // 10 MB
 // TripHandler handles HTTP requests for trip sheet extraction.
 type TripHandler struct {
 	extractionService *service.ExtractionService
+	tripRepo          *repository.TripRepository
+	auditStore        *storage.AuditStore
 }
 
-// NewTripHandler creates a new handler with the given extraction service.
-func NewTripHandler(es *service.ExtractionService) *TripHandler {
-	return &TripHandler{extractionService: es}
+// NewTripHandler creates a new handler with the given dependencies.
+func NewTripHandler(es *service.ExtractionService, repo *repository.TripRepository, audit *storage.AuditStore) *TripHandler {
+	return &TripHandler{
+		extractionService: es,
+		tripRepo:          repo,
+		auditStore:        audit,
+	}
 }
 
 // ExtractTrip handles POST /api/v1/trips/extract
@@ -89,7 +99,29 @@ func (h *TripHandler) ExtractTrip(w http.ResponseWriter, r *http.Request) {
 	status, validation := service.ValidateTripSheet(tripSheet)
 	log.Printf("Validation result: %s (errors: %d)", status, len(validation.Errors))
 
-	// ---- 7. Build and return response ----
+	// ---- 7. Persist to database ----
+	record := buildTripRecord(tripSheet, status, validation)
+
+	// Save audit image first (we need the trip ID from the DB insert)
+	if err := h.tripRepo.SaveTrip(r.Context(), record); err != nil {
+		log.Printf("Warning: failed to persist trip to database: %v", err)
+		// Don't fail the request — still return the extraction result
+	} else {
+		log.Printf("Trip persisted to DB with ID: %s", record.ID)
+
+		// Save audit image keyed by trip ID
+		if h.auditStore != nil {
+			imgPath, err := h.auditStore.SaveImage(record.ID, imageBytes, detectedType)
+			if err != nil {
+				log.Printf("Warning: failed to save audit image: %v", err)
+			} else {
+				record.ImagePath = imgPath
+				log.Printf("Audit image saved: %s", imgPath)
+			}
+		}
+	}
+
+	// ---- 8. Build and return response ----
 	response := domain.ExtractionResponse{
 		Status:      status,
 		TripSheet:   tripSheet,
@@ -99,6 +131,58 @@ func (h *TripHandler) ExtractTrip(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Request completed in %s", time.Since(startTime))
 	writeJSON(w, http.StatusOK, response)
+}
+
+// GetTrip handles GET /api/v1/trips/{id}
+func (h *TripHandler) GetTrip(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "Missing trip ID")
+		return
+	}
+
+	record, err := h.tripRepo.GetTripByID(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "Trip not found: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, record)
+}
+
+// ListTrips handles GET /api/v1/trips
+func (h *TripHandler) ListTrips(w http.ResponseWriter, r *http.Request) {
+	trips, err := h.tripRepo.ListTrips(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to list trips: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, trips)
+}
+
+// buildTripRecord converts a TripSheet + validation result into a persistence record.
+func buildTripRecord(ts *domain.TripSheet, status string, val *domain.ValidationResult) *domain.TripRecord {
+	record := &domain.TripRecord{
+		OdometerOpen:     ts.OdometerOpen,
+		OdometerClose:    ts.OdometerClose,
+		TotalMiles:       ts.TotalMiles,
+		ConfidenceScore:  ts.ConfidenceScore,
+		FlaggedFields:    ts.FlaggedFields,
+		Status:           status,
+		ValidationErrors: val.Errors,
+	}
+
+	for i, item := range ts.LineItems {
+		record.LineItems = append(record.LineItems, domain.LineItemRecord{
+			Date:      item.Date,
+			Location:  item.Location,
+			Miles:     item.Miles,
+			SortOrder: i,
+		})
+	}
+
+	return record
 }
 
 // writeJSON sends a JSON response with the given status code.

@@ -11,13 +11,34 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/trucking-poc/server/internal/handler"
+	"github.com/trucking-poc/server/internal/repository"
 	"github.com/trucking-poc/server/internal/service"
+	"github.com/trucking-poc/server/internal/storage"
 )
 
 func main() {
 	ctx := context.Background()
+
+	// ---- Database connection ----
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/trucking?sslmode=disable"
+	}
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer pool.Close()
+
+	// Verify connection
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
+	log.Println("✅ Connected to Postgres")
 
 	// ---- Initialize services ----
 	extractionSvc, err := service.NewExtractionService(ctx)
@@ -26,7 +47,19 @@ func main() {
 	}
 	defer extractionSvc.Close()
 
-	tripHandler := handler.NewTripHandler(extractionSvc)
+	tripRepo := repository.NewTripRepository(pool)
+
+	auditPath := os.Getenv("AUDIT_IMAGE_PATH")
+	if auditPath == "" {
+		auditPath = "./audit_images"
+	}
+	auditStore, err := storage.NewAuditStore(auditPath)
+	if err != nil {
+		log.Fatalf("Failed to initialize audit store: %v", err)
+	}
+	log.Printf("✅ Audit images will be stored at: %s", auditPath)
+
+	tripHandler := handler.NewTripHandler(extractionSvc, tripRepo, auditStore)
 
 	// ---- Set up router ----
 	r := chi.NewRouter()
@@ -47,6 +80,8 @@ func main() {
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/trips/extract", tripHandler.ExtractTrip)
+		r.Get("/trips", tripHandler.ListTrips)
+		r.Get("/trips/{id}", tripHandler.GetTrip)
 	})
 
 	// ---- Start server ----
@@ -80,6 +115,8 @@ func main() {
 
 	log.Printf("🚛 Trucking Trip Sheet API starting on :%s", port)
 	log.Printf("   POST /api/v1/trips/extract")
+	log.Printf("   GET  /api/v1/trips")
+	log.Printf("   GET  /api/v1/trips/{id}")
 	log.Printf("   GET  /health")
 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
