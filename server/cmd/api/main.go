@@ -89,6 +89,14 @@ func main() {
 		r.Get("/trips/export/accounting", exportHandler.ExportAccounting)
 	})
 
+	// Serve audit images from the audit_images folder so they can be viewed in the UI
+	imagesFs := http.FileServer(http.Dir(auditPath))
+	r.Handle("/audit_images/*", http.StripPrefix("/audit_images/", imagesFs))
+
+	// Serve static files from the "public" directory at the root
+	fs := http.FileServer(http.Dir("./public"))
+	r.Handle("/*", fs)
+
 	// ---- Start server ----
 	port := os.Getenv("PORT")
 	if port == "" {

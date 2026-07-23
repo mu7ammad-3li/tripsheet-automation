@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tripsheet-automation — Proof of Concept</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Main Style -->
+    <link rel="stylesheet" href="/index.css">
+</head>
+<body class="circuit-dots">
+    <!-- Scanline Overlay -->
+    <div class="scanline"></div>
+
+    <div class="app-container">
+        <!-- Top Navigation -->
+        <header class="app-header">
+            <div class="header-left">
+                <i class="fa-solid fa-truck-fast logo-icon"></i>
+                <div class="brand-text">
+                    <h1>tripsheet-automation</h1>
+                    <span class="poc-badge">Proof of Concept</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div id="system-status" class="status-indicator">
+                    <span class="pulse-dot green"></span>
+                    <span class="status-text text-dim">Engine: Online</span>
+                </div>
+                <button id="theme-toggle" class="theme-toggle-btn" title="Toggle Theme">
+                    <i class="fa-solid fa-sun"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Layout -->
+        <main class="main-workspace">
+            <!-- Sidebar: Recent Uploads -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h2><i class="fa-solid fa-list-check"></i> Extraction Queue</h2>
+                    <span id="queue-count" class="badge">0</span>
+                </div>
+                <div id="queue-list" class="queue-list">
+                    <div class="empty-queue-msg text-dim">
+                        <i class="fa-solid fa-folder-open"></i>
+                        No extractions loaded.
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Panel -->
+            <section class="content-panel">
+                <!-- Dropzone / Landing View -->
+                <div id="landing-view" class="workspace-card dropzone-card active">
+                    <div id="dropzone" class="dropzone">
+                        <input type="file" id="file-input" accept="image/jpeg,image/png" style="display: none;">
+                        <div class="dropzone-content">
+                            <div class="icon-stack">
+                                <i class="fa-solid fa-cloud-arrow-up main-icon"></i>
+                                <i class="fa-solid fa-file-invoice hover-icon"></i>
+                            </div>
+                            <h3>Upload Handwritten Trip Sheet</h3>
+                            <p class="text-dim">Drag and drop your scanned image or photo here, or click to browse</p>
+                            <span class="format-hint">Supports JPEG, PNG (Max 10MB)</span>
+                            <div class="preprocess-option">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="preprocess-check">
+                                    <span class="checkmark"></span>
+                                    Apply contrast & grayscale preprocessing (for dark mobile photos)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Processing / Loading View -->
+                <div id="processing-view" class="workspace-card processing-card">
+                    <div class="loader-container">
+                        <div class="glowing-spinner"></div>
+                        <div class="loader-icon"><i class="fa-solid fa-microchip"></i></div>
+                    </div>
+                    <h2>Processing Document</h2>
+                    <p class="text-dim subtitle">VLM extraction & guardrails active...</p>
+                    
+                    <!-- Simulating terminal log processing -->
+                    <div class="terminal-logs">
+                        <div class="terminal-header">
+                            <span class="term-dot red"></span>
+                            <span class="term-dot yellow"></span>
+                            <span class="term-dot green"></span>
+                            <span class="term-title">pipeline.log</span>
+                        </div>
+                        <div id="log-content" class="log-content">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Split-screen Results View -->
+                <div id="results-view" class="results-layout">
+                    <!-- Left Pane: Image Viewer -->
+                    <div class="pane image-pane workspace-card">
+                        <div class="pane-header">
+                            <h3><i class="fa-regular fa-image"></i> Document Audit Source</h3>
+                            <button id="close-results" class="btn btn-secondary btn-icon-only"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <div class="image-viewer">
+                            <img id="audit-image" src="" alt="Audit image source">
+                        </div>
+                    </div>
+
+                    <!-- Right Pane: Analysis -->
+                    <div class="pane data-pane workspace-card">
+                        <div class="pane-header tab-header">
+                            <button class="tab-btn active" data-tab="tab-data"><i class="fa-solid fa-file-invoice"></i> Extracted Data</button>
+                            <button class="tab-btn" data-tab="tab-validation"><i class="fa-solid fa-shield-halved"></i> Validation Guardrails</button>
+                            <button class="tab-btn" data-tab="tab-export"><i class="fa-solid fa-share-from-square"></i> Simulated Hand-off</button>
+                        </div>
+
+                        <div class="tab-viewport">
+                            <!-- Tab: Extracted Data -->
+                            <div id="tab-data" class="tab-pane active">
+                                <div class="status-summary-bar">
+                                    <div class="summary-metric">
+                                        <span class="label">Status</span>
+                                        <span id="extracted-status" class="status-pill green">Validated</span>
+                                    </div>
+                                    <div class="summary-metric">
+                                        <span class="label">VLM Confidence</span>
+                                        <span id="extracted-confidence" class="confidence-val">98%</span>
+                                    </div>
+                                </div>
+
+                                <div class="data-group">
+                                    <h4>Odometer Readings</h4>
+                                    <div class="grid-columns-3">
+                                        <div class="data-cell">
+                                            <span class="label">Odometer Open</span>
+                                            <span id="val-odo-open" class="value font-mono">102,450</span>
+                                        </div>
+                                        <div class="data-cell">
+                                            <span class="label">Odometer Close</span>
+                                            <span id="val-odo-close" class="value font-mono">102,780</span>
+                                        </div>
+                                        <div class="data-cell">
+                                            <span class="label">Total Miles</span>
+                                            <span id="val-total-miles" class="value font-mono">436</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="data-group">
+                                    <h4>Line Items (Route Legs)</h4>
+                                    <div class="table-responsive">
+                                        <table class="data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Date</th>
+                                                    <th>Route Leg</th>
+                                                    <th class="text-right">Miles</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="line-items-body">
+                                                <!-- Populated via JS -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tab: Validation Guardrails -->
+                            <div id="tab-validation" class="tab-pane">
+                                <div id="validation-alert-box" class="alert-box danger">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                    <div>
+                                        <h5>Validation Errors</h5>
+                                        <ul id="validation-errors-list">
+                                            <!-- Errors list -->
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                <div class="validation-cards-grid">
+                                    <!-- Card 1 -->
+                                    <div id="card-check-odo" class="validation-card">
+                                        <div class="card-title-row">
+                                            <span>Odometer Delta Check</span>
+                                            <span class="badge status-check"><i class="fa-solid fa-circle-check"></i> PASS</span>
+                                        </div>
+                                        <p class="formula font-mono">Odo Close - Odo Open ≈ Total Miles</p>
+                                        <p class="description text-dim">Verifies that the odometer difference matches the reported total miles within a 5% tolerance.</p>
+                                    </div>
+
+                                    <!-- Card 2 -->
+                                    <div id="card-check-sum" class="validation-card">
+                                        <div class="card-title-row">
+                                            <span>Line Item Sum Check</span>
+                                            <span class="badge status-check"><i class="fa-solid fa-circle-check"></i> PASS</span>
+                                        </div>
+                                        <p class="formula font-mono">Sum(Leg Miles) ≈ Total Miles</p>
+                                        <p class="description text-dim">Aggregates all individual route leg mileages and matches the sum against the total miles logged.</p>
+                                    </div>
+
+                                    <!-- Card 3 -->
+                                    <div id="card-check-conf" class="validation-card">
+                                        <div class="card-title-row">
+                                            <span>VLM Confidence Score</span>
+                                            <span class="badge status-check"><i class="fa-solid fa-circle-check"></i> PASS</span>
+                                        </div>
+                                        <p class="formula font-mono">Confidence > 0.85</p>
+                                        <p class="description text-dim">Flags the sheet for manual audit if the handwriting is messy, dark, or illegible, resulting in a low confidence score.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tab: Simulated Hand-off -->
+                            <div id="tab-export" class="tab-pane">
+                                <div class="export-selector-bar">
+                                    <button class="export-tab active" data-export="tms">TMS Dispatch format</button>
+                                    <button class="export-tab" data-export="accounting">Accounting Payroll format</button>
+                                </div>
+                                <div class="export-code-box">
+                                    <div class="code-header">
+                                        <span id="export-filename" class="font-mono">tms_export.json</span>
+                                        <button id="copy-code-btn" class="btn btn-secondary btn-sm"><i class="fa-regular fa-copy"></i> Copy JSON</button>
+                                    </div>
+                                    <pre><code id="export-code" class="font-mono">{ ... }</code></pre>
+                                </div>
+                                <div class="export-status-note">
+                                    <i class="fa-solid fa-circle-info"></i>
+                                    <span id="export-disclaimer">Only Validated trip sheets can be exported to downstream ERP pipelines.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Main Logic -->
+    <script src="/index.js"></script>
+</body>
+</html>
