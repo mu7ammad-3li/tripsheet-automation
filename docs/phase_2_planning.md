@@ -1,7 +1,19 @@
 # Phase 2: Go Ingestion & Validation API — Planning
 
+## Context
+
+> The AI handles **only** unstructured data extraction. **Deterministic code** handles all validation. This separation ensures high accuracy without silent data corruption.
+
+Once the VLM (Phase 1) consistently outputs valid JSON, we wrap it in a Go service to enforce business rules deterministically. The Go backend is the trust boundary — the VLM's output is treated as untrusted input that must pass through arithmetic and schema validation before being accepted.
+
 ## Objective
-Wrap the proven VLM extraction (Phase 1) in a deterministic Go backend that receives trip sheet images, calls the VLM, validates the structured output against business rules, and routes payloads to either `Validated` or `Exception` status.
+
+Build an API-first Go service that:
+1. Accepts a trip sheet image via multipart upload
+2. Optionally preprocesses the image for quality improvement
+3. Sends the image to the Gemini VLM for structured extraction
+4. Runs deterministic cross-checks on the extracted data
+5. Routes the result to either `validated` or `exception` status
 
 ---
 
@@ -17,84 +29,62 @@ graph LR
     E -->|Fail| G[Status: Exception]
 ```
 
-## Project Structure (Go Standard Layout)
+## Project Structure
 
 ```
 server/
-├── cmd/
-│   └── api/
-│       └── main.go              # Entry point, dependency wiring, server start
+├── cmd/api/main.go                    # Entry point, dependency wiring
 ├── internal/
-│   ├── domain/
-│   │   └── trip.go              # TripSheet, LineItem structs + validation tags
-│   ├── handler/
-│   │   └── trip_handler.go      # HTTP handler: POST /api/v1/trips/extract
+│   ├── domain/trip.go                 # TripSheet, LineItem structs + validation tags
+│   ├── handler/trip_handler.go        # HTTP handler: POST /api/v1/trips/extract
 │   ├── service/
-│   │   ├── extraction.go        # Calls VLM, returns TripSheet
-│   │   └── validation.go        # Arithmetic cross-checks, confidence routing
-│   └── preprocessing/
-│       └── image.go             # Grayscale + contrast boost for mobile photos
-├── go.mod
-└── go.sum
+│   │   ├── extraction.go             # Calls VLM, returns TripSheet
+│   │   └── validation.go             # Arithmetic cross-checks, confidence routing
+│   └── preprocessing/image.go        # Grayscale + contrast boost for mobile photos
 ```
-
----
 
 ## Engineering Decisions
 
 ### 1. Router: `chi`
-- Lightweight, idiomatic, fully compatible with `net/http`.
-- Built-in middleware for logging, request IDs, recovery.
-- Sub-routers for API versioning (`/api/v1/...`).
+- Lightweight, idiomatic, fully compatible with `net/http`
+- Built-in middleware for logging, request IDs, recovery
+- Sub-routers for API versioning (`/api/v1/...`)
 
-### 2. Validation: `go-playground/validator`
-- Struct tag-based validation on the `TripSheet` struct.
-- Enforces required fields and data types at the handler level.
-- Custom validators for business-specific rules.
+### 2. Validation: Deterministic Guardrails
+The VLM's output is **untrusted input**. The Go backend enforces these checks:
 
-### 3. Endpoint Design
+| # | Check | Rule | On Failure |
+|---|-------|------|------------|
+| 1 | Required Fields | `odometer_open`, `odometer_close` must be non-null | → Exception |
+| 2 | Odometer Sanity | `odometer_close > odometer_open` | → Exception |
+| 3 | Odometer Delta | `close - open ≈ total_miles` (±5% tolerance) | → Exception |
+| 4 | Line Item Sum | `sum(line_items[].miles) ≈ total_miles` (±5% tolerance) | → Exception |
+| 5 | Confidence | `confidence_score > 0.85` | → Exception |
 
-#### `POST /api/v1/trips/extract`
-- **Input**: Multipart form with a single image file.
-- **Processing Pipeline**:
-  1. Parse multipart form (limit: 10MB).
-  2. Validate MIME type via `http.DetectContentType` (accept `image/jpeg`, `image/png`).
-  3. If mobile photo detected → apply grayscale + contrast preprocessing.
-  4. Send image bytes to Gemini VLM API.
-  5. Unmarshal JSON response into `domain.TripSheet` struct.
-  6. Run deterministic validation guardrails.
-  7. Return the validated (or exception-flagged) payload.
-- **Output**: JSON response with extracted data + `status` field.
+### 3. Image Preprocessing
+For mobile photos (lower quality), an optional preprocessing step is applied before sending to the VLM:
+- **Grayscale conversion** — reduces noise from color artifacts
+- **Contrast boost (+30)** — improves text legibility on shadowed/dark images
+- **Sharpening** — improves edge definition on blurry photos
+- Triggered via query parameter: `?preprocess=true`
 
-### 4. Deterministic Cross-Checks (Guardrails)
+### 4. Security
+- **MIME validation**: `http.DetectContentType` on raw bytes (not file extension)
+- **File size limit**: 10MB max upload
+- **No user-provided filenames** stored — UUIDs only
 
-These are the arithmetic business rules that the Go backend enforces **after** the VLM returns its extraction:
+## Response Shape
 
-| Check | Rule | On Failure |
-|-------|------|------------|
-| **Odometer Delta** | `odometer_close - odometer_open ≈ total_miles` (±5% tolerance) | Status → Exception |
-| **Line Item Sum** | `sum(line_items[].miles) ≈ total_miles` (±5% tolerance) | Status → Exception |
-| **Confidence Threshold** | `confidence_score > 0.85` | Status → Exception |
-| **Required Fields** | `odometer_open`, `odometer_close` must be non-null | Status → Exception |
-| **Odometer Sanity** | `odometer_close > odometer_open` | Status → Exception |
-
-### 5. Image Preprocessing
-For mobile photos (lower quality), apply a lightweight preprocessing step before sending to the VLM:
-- **Grayscale conversion**: Reduces noise from color artifacts.
-- **Contrast boost**: Improves text legibility on shadowed/dark images.
-- **Library**: Standard Go `image` package + `disintegration/imaging` for filters.
-
-### 6. Response Shape
-
+### Validated
 ```json
 {
   "status": "validated",
   "trip_sheet": {
-    "odometer_open": 187421,
-    "odometer_close": 187815,
-    "total_miles": 394,
+    "odometer_open": 102450,
+    "odometer_close": 102780,
+    "total_miles": 436,
     "line_items": [...],
-    "confidence_score": 0.95,
+    "confidence_score": 1.0,
     "flagged_fields": []
   },
   "validation": {
@@ -106,40 +96,30 @@ For mobile photos (lower quality), apply a lightweight preprocessing step before
 }
 ```
 
-Exception example:
+### Exception
 ```json
 {
   "status": "exception",
-  "trip_sheet": { ... },
+  "trip_sheet": { "..." },
   "validation": {
     "odometer_delta_check": "fail",
-    "line_item_sum_check": "pass",
-    "confidence_check": "pass",
-    "errors": [
-      "Odometer delta (394) does not match total_miles (500) — difference exceeds 5% tolerance"
-    ]
+    "errors": ["Odometer delta (330) does not match total_miles (436) — deviation 24.3% exceeds 5% tolerance"]
   }
 }
 ```
-
----
 
 ## Dependencies
 
 | Package | Purpose |
 |---------|---------|
 | `github.com/go-chi/chi/v5` | HTTP router |
-| `github.com/go-playground/validator/v10` | Struct validation |
-| `github.com/disintegration/imaging` | Image preprocessing |
 | `github.com/google/generative-ai-go` | Gemini API client |
+| `github.com/disintegration/imaging` | Image preprocessing |
 
----
+## Files
 
-## Implementation Order
-
-1. **Scaffold** — `go mod init`, directory structure, `main.go` with chi router
-2. **Domain structs** — `TripSheet`, `LineItem` with validator tags
-3. **Extraction service** — Call Gemini API with image bytes, return `TripSheet`
-4. **Validation service** — Arithmetic guardrails + confidence routing
-5. **Handler** — Wire it all together in `POST /api/v1/trips/extract`
-6. **Preprocessing** — Add optional image enhancement step
+- [`server/cmd/api/main.go`](../server/cmd/api/main.go) — Entry point
+- [`server/internal/handler/trip_handler.go`](../server/internal/handler/trip_handler.go) — HTTP handler
+- [`server/internal/service/extraction.go`](../server/internal/service/extraction.go) — VLM extraction service
+- [`server/internal/service/validation.go`](../server/internal/service/validation.go) — Validation engine
+- [`server/internal/preprocessing/image.go`](../server/internal/preprocessing/image.go) — Image enhancement

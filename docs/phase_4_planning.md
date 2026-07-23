@@ -1,9 +1,14 @@
 # Phase 4: TMS/Accounting Hand-off — Planning
 
-## Objective
-Prove the end-to-end value of the MVP by transforming validated trip data into the specific JSON shapes required by downstream TMS (Transportation Management System) and Accounting/Payroll systems.
+## Context
 
-**The POC Goal:** Physical paper in → validated payroll and dispatch data out.
+> The final step of the MVP proves the value by moving the data **out of our silo** and into the downstream systems. This demonstrates the end-to-end flow: **physical paper in, validated payroll and dispatch data out.**
+
+The whole point of automating trip sheet extraction is to feed clean, structured data into the systems that actually run the business — the Transportation Management System (TMS) for dispatch visibility and the accounting/payroll system for driver settlement.
+
+## Objective
+
+Transform validated trip data from Postgres into the specific JSON shapes required by downstream TMS and Accounting APIs, and expose them as export endpoints that prove the end-to-end value of the automation pipeline.
 
 ---
 
@@ -11,29 +16,52 @@ Prove the end-to-end value of the MVP by transforming validated trip data into t
 
 ```mermaid
 graph LR
-    A[(Postgres)] -->|Validated trips| B[Export Service]
+    A[(Postgres)] -->|Validated trips only| B[Export Service]
     B --> C[TMS Payload Transformer]
     B --> D[Accounting Payload Transformer]
     C --> E["GET /api/v1/trips/export/tms"]
     D --> F["GET /api/v1/trips/export/accounting"]
-    E --> G[TMS API / Webhook]
-    F --> H[Payroll System]
+    E -.->|Production: webhook/MQ| G[TMS API]
+    F -.->|Production: webhook/MQ| H[Payroll System]
 ```
+
+## Engineering Decisions
+
+### 1. Only `validated` trips are exported
+Trips with `status: exception` are excluded from all exports. They must be reviewed and resolved by a human before entering downstream systems. This is a core safety guarantee.
+
+### 2. Route splitting
+The VLM extracts locations as strings like `"Chicago, IL to Milwaukee, WI"`. The export transformer splits these into structured `origin`/`destination` pairs for TMS dispatch.
+
+### 3. Payroll calculation
+For the POC, the rate per mile is hardcoded at **$0.55/mile**. In production, this would come from a driver contract table or rate API.
+
+### 4. Simulated endpoints (POC)
+For the POC, `GET` endpoints return the transformed payloads. In production, these would be replaced with:
+- Outbound webhooks triggered on trip validation
+- Message queue publishers (e.g., Kafka, SQS)
+- Direct API calls to the TMS/accounting systems
+
+---
 
 ## Payload Shapes
 
 ### TMS Export (Dispatch)
-The TMS system needs route and mileage data for dispatch tracking:
+
+The TMS system needs route and mileage data for dispatch tracking and fleet visibility:
+
 ```json
 {
   "export_type": "tms_dispatch",
-  "exported_at": "2026-07-23T...",
+  "exported_at": "2026-07-23T19:50:00Z",
   "trips": [
     {
-      "trip_id": "uuid",
+      "trip_id": "abc-123-uuid",
       "total_miles": 436,
       "route_segments": [
-        {"origin": "Chicago, IL", "destination": "Milwaukee, WI", "miles": 92, "date": "7/01/24"}
+        {"origin": "Chicago, IL", "destination": "Milwaukee, WI", "miles": 92, "date": "7/01/24"},
+        {"origin": "Milwaukee, WI", "destination": "Madison, WI", "miles": 79, "date": "7/01/24"},
+        {"origin": "Madison, WI", "destination": "Rockford, IL", "miles": 67, "date": "7/02/24"}
       ],
       "odometer": {"start": 102450, "end": 102780}
     }
@@ -42,14 +70,16 @@ The TMS system needs route and mileage data for dispatch tracking:
 ```
 
 ### Accounting Export (Payroll)
-The accounting system needs cost-basis data for driver payroll:
+
+The accounting system needs cost-basis data for driver payroll settlement:
+
 ```json
 {
   "export_type": "accounting_payroll",
-  "exported_at": "2026-07-23T...",
+  "exported_at": "2026-07-23T19:50:00Z",
   "pay_items": [
     {
-      "trip_id": "uuid",
+      "trip_id": "abc-123-uuid",
       "date_range": {"start": "7/01/24", "end": "7/02/24"},
       "total_miles": 436,
       "billable_miles": 436,
@@ -60,18 +90,15 @@ The accounting system needs cost-basis data for driver payroll:
 }
 ```
 
-## Engineering Decisions
+## API Endpoints
 
-### 1. Only export `validated` trips
-Exception-flagged trips must be reviewed by a human first. The export endpoints will filter to `status = 'validated'` only.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/trips/export/tms` | All validated trips as TMS dispatch payload |
+| `GET` | `/api/v1/trips/export/accounting` | All validated trips as payroll payload |
 
-### 2. Simulated webhook
-For the POC, we use GET endpoints that return the transformed payload. In production, these would be replaced with outbound webhooks or message queue publishers.
+## Files
 
-### 3. Rate per mile
-Hardcoded at $0.55/mile for the POC. In production, this would come from a driver contract or rate table.
-
-## Implementation Order
-1. Export service — payload transformation logic
-2. Export handler — HTTP endpoints
-3. Wire into main.go
+- [`server/internal/service/export.go`](../server/internal/service/export.go) — TMS + Accounting payload transformers
+- [`server/internal/handler/export_handler.go`](../server/internal/handler/export_handler.go) — Export HTTP handlers
+- [`server/internal/repository/trip_repository.go`](../server/internal/repository/trip_repository.go) — `ListValidatedTrips` method
