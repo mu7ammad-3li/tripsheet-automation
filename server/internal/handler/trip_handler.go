@@ -86,8 +86,13 @@ func (h *TripHandler) ExtractTrip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ---- 5. Call VLM extraction ----
-	log.Println("Sending image to Gemini VLM for extraction...")
-	tripSheet, err := h.extractionService.ExtractFromImage(r.Context(), imageBytes, detectedType)
+	modelName := r.URL.Query().Get("model")
+	if modelName == "" {
+		modelName = "gemini-3.5-flash-lite"
+	}
+
+	log.Printf("Sending image to Gemini VLM (%s) for extraction...", modelName)
+	tripSheet, err := h.extractionService.ExtractFromImage(r.Context(), imageBytes, detectedType, modelName)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "VLM extraction failed: "+err.Error())
 		return

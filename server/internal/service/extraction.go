@@ -36,7 +36,6 @@ REQUIRED JSON SCHEMA:
 // ExtractionService handles communication with the Gemini VLM API.
 type ExtractionService struct {
 	client *genai.Client
-	model  *genai.GenerativeModel
 }
 
 // NewExtractionService creates a new service with an initialized Gemini client.
@@ -51,14 +50,8 @@ func NewExtractionService(ctx context.Context) (*ExtractionService, error) {
 		return nil, fmt.Errorf("failed to create Gemini client: %w", err)
 	}
 
-	model := client.GenerativeModel("gemini-3.5-flash-lite")
-	model.SystemInstruction = genai.NewUserContent(genai.Text(systemPrompt))
-	model.ResponseMIMEType = "application/json"
-	model.SetTemperature(0.0)
-
 	return &ExtractionService{
 		client: client,
-		model:  model,
 	}, nil
 }
 
@@ -70,12 +63,22 @@ func (s *ExtractionService) Close() {
 }
 
 // ExtractFromImage sends image bytes to the Gemini VLM and returns a parsed TripSheet.
-func (s *ExtractionService) ExtractFromImage(ctx context.Context, imageBytes []byte, mimeType string) (*domain.TripSheet, error) {
+func (s *ExtractionService) ExtractFromImage(ctx context.Context, imageBytes []byte, mimeType string, modelName string) (*domain.TripSheet, error) {
+	if modelName == "" {
+		modelName = "gemini-3.5-flash-lite"
+	}
+
+	// Initialize the model dynamically on this request
+	model := s.client.GenerativeModel(modelName)
+	model.SystemInstruction = genai.NewUserContent(genai.Text(systemPrompt))
+	model.ResponseMIMEType = "application/json"
+	model.SetTemperature(0.0)
+
 	// genai.ImageData expects format ("jpeg", "png"), not full MIME type ("image/jpeg")
 	format := strings.TrimPrefix(mimeType, "image/")
 	imgData := genai.ImageData(format, imageBytes)
 
-	resp, err := s.model.GenerateContent(ctx,
+	resp, err := model.GenerateContent(ctx,
 		imgData,
 		genai.Text("Extract the trip sheet data from this image. Return ONLY valid JSON."),
 	)

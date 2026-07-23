@@ -470,6 +470,34 @@ body {
     text-align: left;
 }
 
+.model-option {
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--on-surface);
+}
+
+.form-select {
+    background-color: var(--surface-container-high);
+    border: 1px solid var(--circuit-grey);
+    color: var(--on-surface);
+    padding: 0.35rem 0.6rem;
+    border-radius: 4px;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    cursor: pointer;
+    outline: none;
+    transition: border-color var(--transition-speed);
+}
+
+.form-select:focus, .form-select:hover {
+    border-color: var(--logic-teal);
+}
+
+
 /* Custom Checkbox */
 .checkbox-container {
     display: block;

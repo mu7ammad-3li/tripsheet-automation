@@ -7,6 +7,7 @@ let activeExportTab = 'tms';
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
 const preprocessCheck = document.getElementById('preprocess-check');
+const modelSelect = document.getElementById('model-select');
 
 const landingView = document.getElementById('landing-view');
 const processingView = document.getElementById('processing-view');
@@ -127,12 +128,14 @@ function handleFile(file) {
         appendLog('WARNING', 'Preprocessing requested: applying grayscale and contrast enhancement...');
     }
 
+    const selectedModel = modelSelect.value;
+
     setTimeout(() => {
         appendLog('INFO', 'Transmitting image bytes to Gemini VLM Extraction API...');
-        appendLog('INFO', 'Model target: gemini-3.5-flash-lite (Free Tier)');
+        appendLog('INFO', `Model target: ${selectedModel}`);
         
         // Actually perform upload
-        uploadFile(file, applyPreprocess);
+        uploadFile(file, applyPreprocess, selectedModel);
     }, 1200);
 }
 
@@ -154,13 +157,13 @@ function appendLog(level, message) {
     logContent.scrollTop = logContent.scrollHeight;
 }
 
-function uploadFile(file, preprocess) {
+function uploadFile(file, preprocess, modelName) {
     const formData = new FormData();
     formData.append('image', file);
 
-    let url = '/api/v1/trips/extract';
+    let url = `/api/v1/trips/extract?model=${encodeURIComponent(modelName)}`;
     if (preprocess) {
-        url += '?preprocess=true';
+        url += '&preprocess=true';
     }
 
     const startTime = Date.now();
