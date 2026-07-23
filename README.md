@@ -1,29 +1,17 @@
 # tripsheet-automation (Proof of Concept)
 
-> **tripsheet-automation** is an AI-augmented, API-first enterprise solution designed to automate the ingestion, structured extraction, and deterministic validation of handwritten trucking trip sheets.
+An AI-augmented, API-first enterprise solution designed to automate the ingestion, structured extraction, and deterministic validation of handwritten trucking trip sheets.
 
 ---
 
-## Executive Summary & Business Case
+## Business Case & Cost Efficiency
 
-### Context & Operational Relevance
-Trip sheets are the primary operational records in transportation logistics. They are critical for tracking driver routes, stops, fuel purchases, IFTA (International Fuel Tax Agreement) jurisdictional mileage, and odometer readings. Currently, many fleets rely on dispatchers creating manual trip plans and drivers filling out paper-based sheets on the road.
+This service replaces manual paper transcription and standard template-based OCR systems with a hybrid pipeline: **AI (VLM) for extraction** + **deterministic Go backend logic for validation**. This guarantees data integrity without silent calculation errors.
 
-### The Core Business Problem
-The reliance on physical, handwritten logs creates significant operational and financial friction:
-1. **Manual Data Ingestion Bottlenecks:** Critical billing and route data remains trapped on paper. Transcribing this data manually causes severe delays in driver payroll settlements, dispatch visibility, and IFTA tax reporting.
-2. **Data Integrity & Quality Variance:** Documents filled out by hand in truck cabs suffer from high handwriting variability, smudged ink, and manual calculation errors (e.g., odometer discrepancies).
-3. **Traditional OCR Limitations:** Standard template-based OCR systems fail on unstructured or high-variance handwritten sheets, lacking the layout understanding and contextual intelligence required to map data fields accurately.
+*   **Average Cost:** **`$0.25 to $0.45` per 1,000 trip sheets processed** (Gemini 3.5 Flash Lite Paid Tier: $0.075/1M input tokens, $0.30/1M output tokens).
+*   **Safety Boundary:** Isolates the VLM for unstructured handwriting extraction, while strict mathematical guardrails enforce validation rules before persisting to PostgreSQL.
+*   **Production Readiness:** Features local audit image archiving, database versioning, and pre-formatted dispatch (TMS) and payroll (Accounting) API export schemas.
 
-### The Solution: Hybrid Extraction & Validation
-This service isolates the AI (VLM) to handle high-variance unstructured data extraction while using **deterministic Go backend logic** to enforce strict validation rules. This hybrid approach ensures enterprise-grade accuracy, eliminates silent data corruption, and speeds up cash-flow cycles by accelerating payroll and billing hand-offs.
-
-### Business Value & VLM Cost Efficiency
-Automating extraction with the Gemini API is extremely cost-effective compared to manual transcription or legacy template OCR:
-*   **Model Tier:** Serves Gemini 3.5 Flash Lite as the default extraction engine (Paid Tier).
-*   **Paid Rates:** Input: **$0.075 per 1M** tokens (image is fixed at 259 tokens) | Output: **$0.30 per 1M** tokens (JSON response).
-*   **Average Cost:** **`$0.25 to $0.45` per 1,000 trip sheets processed** ($0.00025 to $0.00045 per sheet).
-*   **Caching Optimization:** Support for Gemini Context Caching can reduce input costs by an additional 50% for high-volume streams.
 
 
 ```
