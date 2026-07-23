@@ -157,3 +157,52 @@ func (r *TripRepository) ListTrips(ctx context.Context) ([]domain.TripRecord, er
 
 	return trips, nil
 }
+
+// ListValidatedTrips returns only trips with status "validated", including their line items.
+// Used by the export endpoints to ensure only human-approved or auto-validated data is exported.
+func (r *TripRepository) ListValidatedTrips(ctx context.Context) ([]domain.TripRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, odometer_open, odometer_close, total_miles, confidence_score,
+		       flagged_fields, status, validation_errors, image_path, created_at
+		FROM trips WHERE status = 'validated' ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list validated trips: %w", err)
+	}
+	defer rows.Close()
+
+	var trips []domain.TripRecord
+	for rows.Next() {
+		var t domain.TripRecord
+		if err := rows.Scan(
+			&t.ID, &t.OdometerOpen, &t.OdometerClose, &t.TotalMiles,
+			&t.ConfidenceScore, &t.FlaggedFields, &t.Status,
+			&t.ValidationErrors, &t.ImagePath, &t.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan trip: %w", err)
+		}
+
+		// Fetch line items for each trip
+		liRows, err := r.pool.Query(ctx, `
+			SELECT id, trip_id, date, location, miles, sort_order
+			FROM trip_line_items WHERE trip_id = $1 ORDER BY sort_order
+		`, t.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get line items for trip %s: %w", t.ID, err)
+		}
+
+		for liRows.Next() {
+			var li domain.LineItemRecord
+			if err := liRows.Scan(&li.ID, &li.TripID, &li.Date, &li.Location, &li.Miles, &li.SortOrder); err != nil {
+				liRows.Close()
+				return nil, fmt.Errorf("failed to scan line item: %w", err)
+			}
+			t.LineItems = append(t.LineItems, li)
+		}
+		liRows.Close()
+
+		trips = append(trips, t)
+	}
+
+	return trips, nil
+}

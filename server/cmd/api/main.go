@@ -60,6 +60,7 @@ func main() {
 	log.Printf("✅ Audit images will be stored at: %s", auditPath)
 
 	tripHandler := handler.NewTripHandler(extractionSvc, tripRepo, auditStore)
+	exportHandler := handler.NewExportHandler(tripRepo)
 
 	// ---- Set up router ----
 	r := chi.NewRouter()
@@ -82,6 +83,10 @@ func main() {
 		r.Post("/trips/extract", tripHandler.ExtractTrip)
 		r.Get("/trips", tripHandler.ListTrips)
 		r.Get("/trips/{id}", tripHandler.GetTrip)
+
+		// Phase 4: Export endpoints
+		r.Get("/trips/export/tms", exportHandler.ExportTMS)
+		r.Get("/trips/export/accounting", exportHandler.ExportAccounting)
 	})
 
 	// ---- Start server ----
@@ -117,6 +122,8 @@ func main() {
 	log.Printf("   POST /api/v1/trips/extract")
 	log.Printf("   GET  /api/v1/trips")
 	log.Printf("   GET  /api/v1/trips/{id}")
+	log.Printf("   GET  /api/v1/trips/export/tms")
+	log.Printf("   GET  /api/v1/trips/export/accounting")
 	log.Printf("   GET  /health")
 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
