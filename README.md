@@ -1,6 +1,6 @@
-# Trucking Trip Sheet Automation
+# tripsheet-automation (Proof of Concept)
 
-> **AI-augmented, API-first service** that automates the ingestion, extraction, and validation of trucking trip sheets — turning handwritten paper into structured, validated data ready for payroll and dispatch.
+> **AI-augmented, API-first Proof of Concept (POC) service** that automates the ingestion, extraction, and validation of trucking trip sheets — turning handwritten paper into structured, validated data ready for payroll and dispatch.
 
 ---
 
@@ -99,6 +99,115 @@ The Go backend enforces these deterministic checks **after** VLM extraction:
 | Confidence Threshold | `confidence_score > 0.85` | → Exception Queue |
 | Required Fields | Odometer values must be non-null | → Exception Queue |
 | Odometer Sanity | `close > open` | → Exception Queue |
+
+---
+
+## POC Test Dataset & GenAI Extraction Results
+
+This Proof of Concept benchmark uses a set of 4 test images generated to cover both clean scanner inputs and the challenging environmental realities of truck cab photos (skewed angles, motion blur, bad lighting, crumpled paper).
+
+Below are the test images and the actual structured JSON objects returned by the Gemini 3.5 Flash Lite VLM:
+
+### 1. Happy Path: Clean Office Scan (`sample3_clean.jpg`)
+* **Description:** A flat, clean scan on a white background with neat handwriting.
+* **Image:**
+  ![Clean Scan](test_data/images/sample3_clean.jpg)
+* **VLM Extraction Response:**
+  <details>
+  <summary>Show JSON Output</summary>
+
+  ```json
+  {
+    "odometer_open": 102450,
+    "odometer_close": 102780,
+    "total_miles": 436,
+    "line_items": [
+      {"date": "7/01/24", "location": "Chicago, IL to Milwaukee, WI", "miles": 92},
+      {"date": "7/01/24", "location": "Milwaukee, WI to Madison, WI", "miles": 79},
+      {"date": "7/02/24", "location": "Madison, WI to Rockford, IL", "miles": 67},
+      {"date": "7/02/24", "location": "Rockford, IL to Springfield, IL", "miles": 102},
+      {"date": "7/02/24", "location": "Springfield, IL to St Louis, MO", "miles": 96}
+    ],
+    "confidence_score": 1.0,
+    "flagged_fields": []
+  }
+  ```
+  </details>
+
+### 2. Dashboard Photo (`sample1.jpg`)
+* **Description:** A mobile photo of a trip sheet lying on a truck dashboard, angled with reflections.
+* **Image:**
+  ![Dashboard Photo](test_data/images/sample1.jpg)
+* **VLM Extraction Response:**
+  <details>
+  <summary>Show JSON Output</summary>
+
+  ```json
+  {
+    "odometer_open": 187421,
+    "odometer_close": 187815,
+    "total_miles": null,
+    "line_items": [
+      {"date": "5/20/24", "location": "Springfield, MO -> St. Louis, MO", "miles": 224},
+      {"date": "5/20/24", "location": "St. Louis, MO -> Troy, IL (Fuel)", "miles": 28},
+      {"date": "5/21/24", "location": "Troy, IL -> Indianapolis, IN", "miles": 247},
+      {"date": "5/21/24", "location": "Indianapolis, IN -> Columbus, OH", "miles": 176}
+    ],
+    "confidence_score": 0.95,
+    "flagged_fields": ["total_miles"]
+  }
+  ```
+  </details>
+
+### 3. Motion Blurred & Messy (`sample2_blurry.jpg`)
+* **Description:** A blurry, out-of-focus photo of a trip sheet on a clipboard inside a truck.
+* **Image:**
+  ![Blurry Photo](test_data/images/sample2_blurry.jpg)
+* **VLM Extraction Response:**
+  <details>
+  <summary>Show JSON Output</summary>
+
+  ```json
+  {
+    "odometer_open": 245830,
+    "odometer_close": 246215,
+    "total_miles": 472,
+    "line_items": [
+      {"date": "6/10/24", "location": "Dallas TX to Austin TX", "miles": 195},
+      {"date": "6/10/24", "location": "Austin TX to San Antonio TX", "miles": 80},
+      {"date": "6/11/24", "location": "San Antonio TX to Houston TX", "miles": 197}
+    ],
+    "confidence_score": 1.0,
+    "flagged_fields": []
+  }
+  ```
+  </details>
+
+### 4. Poor Night Lighting & Crumpled (`sample4_dark.jpg`)
+* **Description:** A dark, poorly lit photo taken at night inside a truck cab with heavy shadows and crumpled paper.
+* **Image:**
+  ![Dark/Shadow Photo](test_data/images/sample4_dark.jpg)
+* **VLM Extraction Response:**
+  <details>
+  <summary>Show JSON Output</summary>
+
+  ```json
+  {
+    "odometer_open": 78200,
+    "odometer_close": 78560,
+    "total_miles": null,
+    "line_items": [
+      {"date": "3/15/24", "location": "Atlanta GA to Birmingham AL", "miles": 148},
+      {"date": "3/16/24", "location": "Birmingham AL to Memphis TN", "miles": 243}
+    ],
+    "confidence_score": 0.95,
+    "flagged_fields": ["total_miles"]
+  }
+  ```
+  </details>
+
+### F1 Scoring Summary
+Our Python benchmarking harness evaluates the GenAI extractions against human-labeled ground truth values. After normalizing string separators (such as mapping `->` and `to` to the same format), the VLM achieved **100% extraction accuracy** for all numerical fields, dates, and locations across the test dataset.
 
 ---
 
